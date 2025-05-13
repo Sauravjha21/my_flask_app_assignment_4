@@ -1,0 +1,203 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="content-section">
+    <h1>UK Parliamentary Constituency Analysis</h1>
+    
+    <div class="row">
+        <div class="col-md-12 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h3>Party Support by Region</h3>
+                </div>
+                <div class="card-body">
+                    <canvas id="regionalChart" width="900" height="400"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3>Home Ownership vs Conservative Support</h3>
+                </div>
+                <div class="card-body">
+                    <canvas id="scatterChart" width="900" height="400"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // Data from Flask
+    const regions = {{ regions|safe }};
+    const conShares = {{ con_shares|safe }};
+    const labShares = {{ lab_shares|safe }};
+    const ldShares = {{ ld_shares|safe }};
+    
+    const houseOwned = {{ house_owned|safe }};
+    const conVoteShare = {{ con_vote_share|safe }};
+    const constituencyNames = {{ constituency_names|safe }};
+    
+    // Regional Chart
+    const regionalChart = new Chart(
+        document.getElementById('regionalChart'),
+        {
+            type: 'bar',
+            data: {
+                labels: regions,
+                datasets: [
+                    {
+                        label: 'Conservative',
+                        data: conShares,
+                        backgroundColor: '#0087DC',
+                    },
+                    {
+                        label: 'Labour',
+                        data: labShares,
+                        backgroundColor: '#DC241f',
+                    },
+                    {
+                        label: 'Liberal Democrat',
+                        data: ldShares,
+                        backgroundColor: '#FDBB30',
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Average Party Vote Share by UK Region (2019)'
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.dataset.label + ': ' + context.raw.toFixed(1) + '%';
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Region'
+                        }
+                    },
+                    y: {
+                        min: 0,
+                        max: 60,
+                        title: {
+                            display: true,
+                            text: 'Vote Share (%)'
+                        }
+                    }
+                }
+            }
+        }
+    );
+    
+    // Scatter Chart
+    const scatterData = [];
+    for(let i = 0; i < houseOwned.length; i++) {
+        scatterData.push({
+            x: houseOwned[i],
+            y: conVoteShare[i],
+            constituency: constituencyNames[i]
+        });
+    }
+    
+    // Calculate trend line
+    const xValues = houseOwned;
+    const yValues = conVoteShare;
+    
+    // Simple linear regression
+    const xMean = xValues.reduce((a, b) => a + b, 0) / xValues.length;
+    const yMean = yValues.reduce((a, b) => a + b, 0) / yValues.length;
+    
+    let numerator = 0;
+    let denominator = 0;
+    
+    for(let i = 0; i < xValues.length; i++) {
+        numerator += (xValues[i] - xMean) * (yValues[i] - yMean);
+        denominator += Math.pow(xValues[i] - xMean, 2);
+    }
+    
+    const slope = numerator / denominator;
+    const intercept = yMean - (slope * xMean);
+    
+    // Create trend line data
+    const minX = Math.min(...xValues);
+    const maxX = Math.max(...xValues);
+    const trendLineData = [
+        { x: minX, y: slope * minX + intercept },
+        { x: maxX, y: slope * maxX + intercept }
+    ];
+    
+    const scatterChart = new Chart(
+        document.getElementById('scatterChart'),
+        {
+            type: 'scatter',
+            data: {
+                datasets: [
+                    {
+                        label: 'Constituencies',
+                        data: scatterData,
+                        backgroundColor: 'rgba(0, 135, 220, 0.5)',
+                        pointRadius: 5,
+                        pointHoverRadius: 7
+                    },
+                    {
+                        label: 'Trend Line',
+                        data: trendLineData,
+                        type: 'line',
+                        borderColor: 'rgba(220, 36, 31, 0.8)',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        fill: false
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Relationship Between Home Ownership and Conservative Support'
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                if(context.datasetIndex === 0) {
+                                    return context.raw.constituency + 
+                                        ' (Home Ownership: ' + context.raw.x.toFixed(1) + '%, ' +
+                                        'Con Support: ' + context.raw.y.toFixed(1) + '%)';
+                                } else {
+                                    return 'Trend Line';
+                                }
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Home Ownership (%)'
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Conservative Vote Share (%)'
+                        }
+                    }
+                }
+            }
+        }
+    );
+</script>
+{% endblock content %}
